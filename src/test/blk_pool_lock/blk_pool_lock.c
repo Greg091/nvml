@@ -113,29 +113,32 @@ test_open_in_different_process(int argc, char **argv, unsigned sleep)
 static void
 test_open_in_different_process(int argc, char **argv, unsigned sleep)
 {
+	uintptr_t result = ut_spawnv(argc, argv, "X", NULL);
 	PMEMblkpool *blk;
-
-	if (sleep > 0)
-		return;
-
 	char *path = argv[1];
+
+	if (result == -1)
+		UT_FATAL("Create new process failed error: %d", GetLastError());
 
 	/* before starting the 2nd process, create a pool */
 	blk = pmemblk_create(path, 4096, PMEMBLK_MIN_POOL,
 		S_IWUSR | S_IRUSR);
+
 	if (!blk)
 		UT_FATAL("!create");
 
-	/*
-	 * "X" is pass as an additional param to the new process
-	 * created by ut_spawnv to distinguish second process on Windows
-	 */
-	uintptr_t result = ut_spawnv(argc, argv, "X", NULL);
+	int status;
 
-	if (result != 0)
-		UT_FATAL("Create new process failed error: %d", GetLastError());
+	if (_cwait(&status, result, 0) < 0)
+		UT_FATAL("!_cwait failed");
+
+	GetExitCodeProcess((HANDLE)result, &status);
+	if (status != 0)
+		UT_FATAL("child process failed");
 
 	pmemblk_close(blk);
+
+	UNLINK(path);
 }
 #endif
 
@@ -146,16 +149,23 @@ main(int argc, char *argv[])
 
 	if (argc < 2)
 		UT_FATAL("usage: %s path", argv[0]);
+	const char *path = argv[1];
 
 	if (argc == 2) {
 		test_reopen(argv[1]);
 		test_open_in_different_process(argc, argv, 0);
-		for (unsigned i = 1; i < 100000; i *= 2)
+		for (unsigned i = 1; i < 100000; i *= 2) {
 			test_open_in_different_process(argc, argv, i);
-	} else if (argc == 3) {
+		}
+	}
+	else if (argc == 3) {
 		PMEMblkpool *blk;
-		/* 2nd arg used by windows for 2 process test */
+
+		while (os_access(path, R_OK))
+			Sleep(0);
+
 		blk = pmemblk_open(argv[1], 4096);
+
 		if (blk)
 			UT_FATAL("pmemblk_open after create process should "
 				"not succeed");

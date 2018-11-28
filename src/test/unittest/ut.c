@@ -169,7 +169,7 @@ ut_spawnv(int argc, const char **argv, ...)
 	}
 	va_end(ap);
 
-	intptr_t ret = _wspawnv(_P_WAIT, wargv2[0], wargv2);
+	intptr_t ret = _wspawnv(_P_NOWAIT, wargv2[0], wargv2);
 
 	for (int i = 0; i < va_count; i++) {
 		free(wargv2[wargc + i]);
