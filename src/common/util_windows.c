@@ -47,6 +47,7 @@
 #define ENOERROR 0
 #define ENOERROR_STR "Success"
 #define UNMAPPED_STR "Unmapped error"
+#define EWOULDBLOCK_STR "Operation would block"
 
 /*
  * util_strerror -- return string describing error number
@@ -68,9 +69,13 @@ util_strerror(int errnum, char *buff, size_t bufflen)
 	case ECANCELED:
 		strcpy_s(buff, bufflen, ECANCELED_STR);
 		break;
+	case EWOULDBLOCK:
+		strcpy_s(buff, bufflen, ECANCELED_STR);
+		break;
 	default:
 		if (strerror_s(buff, bufflen, errnum))
 			strcpy_s(buff, bufflen, UNMAPPED_STR);
+		LOG(3, "%s; error code: %i", strerror(errno), errno);
 	}
 }
 

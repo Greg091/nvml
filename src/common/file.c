@@ -505,7 +505,7 @@ util_file_create(const char *path, size_t size, size_t minsize)
 #ifndef _WIN32
 	mode = 0;
 #else
-	mode = S_IWRITE | S_IREAD;
+	mode = S_IWRITE | S_IREAD;//=0;
 	flags |= O_BINARY;
 #endif
 
