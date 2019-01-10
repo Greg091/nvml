@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2018, Intel Corporation
+ * Copyright 2014-2019, Intel Corporation
  * Copyright (c) 2016, Microsoft Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,9 +32,9 @@
  */
 
 /*
- * pmem_is_pmem.c -- unit test for pmem_is_pmem()
+ * pmem_is_pmem_mt.c -- multithreaded unit test for pmem_is_pmem()
  *
- * usage: pmem_is_pmem file [env]
+ * usage: pmem_is_pmem_mt file [env]
  */
 
 #include "unittest.h"
@@ -58,7 +58,7 @@ worker(void *arg)
 int
 main(int argc, char *argv[])
 {
-	START(argc, argv, "pmem_is_pmem");
+	START(argc, argv, "pmem_is_pmem_mt");
 
 	if (argc <  2 || argc > 3)
 		UT_FATAL("usage: %s file [env]", argv[0]);

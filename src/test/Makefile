@@ -1,5 +1,5 @@
 #
-# Copyright 2014-2018, Intel Corporation
+# Copyright 2014-2019, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -197,7 +197,7 @@ endif
 
 PMEM_TESTS = \
 	pmem_include\
-	pmem_is_pmem\
+	pmem_is_pmem_mt\
 	pmem_is_pmem_posix\
 	pmem_map_file\
 	pmem_has_auto_flush\

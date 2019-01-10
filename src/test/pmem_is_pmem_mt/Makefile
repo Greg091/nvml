@@ -1,7 +1,5 @@
-#!/usr/bin/env bash
 #
-# Copyright 2014-2018, Intel Corporation
-# Copyright (c) 2016, Microsoft Corporation. All rights reserved.
+# Copyright 2014-2019, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -33,22 +31,11 @@
 #
 
 #
-# src/test/pmem_is_pmem/TEST2 -- unit test for pmem_is_pmem
+# src/test/pmem_is_pmem_mt/Makefile -- build pmem_is_pmem_mt unit test
 #
+TARGET = pmem_is_pmem_mt
+OBJS = pmem_is_pmem_mt.o
 
-# standard unit test setup
-. ../unittest/unittest.sh
+LIBPMEM=y
 
-require_test_type medium
-
-require_fs_type non-pmem
-
-setup
-
-create_holey_file 2M $DIR/testfile1
-export PMEM_IS_PMEM_FORCE=1
-expect_normal_exit ./pmem_is_pmem$EXESUFFIX $DIR/testfile1
-
-check
-
-pass
+include ../Makefile.inc

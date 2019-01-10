@@ -1,5 +1,6 @@
 #
-# Copyright 2014-2016, Intel Corporation
+# Copyright 2014-2019, Intel Corporation
+# Copyright (c) 2016, Microsoft Corporation. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -31,11 +32,21 @@
 #
 
 #
-# src/test/pmem_is_pmem/Makefile -- build pmem_is_pmem unit test
+# src\test\pmem_is_pmem_mt\TEST3 -- multithreaded unit test for pmem_is_pmem
 #
-TARGET = pmem_is_pmem
-OBJS = pmem_is_pmem.o
 
-LIBPMEM=y
+# standard unit test setup
+. ..\unittest\unittest.ps1
 
-include ../Makefile.inc
+require_fs_type pmem
+require_test_type medium
+
+setup
+
+create_holey_file 2M $DIR\testfile1
+$ENV:PMEM_IS_PMEM_FORCE = "0"
+expect_normal_exit $ENV:EXE_DIR\pmem_is_pmem_mt$Env:EXESUFFIX $DIR\testfile1
+
+check
+
+pass

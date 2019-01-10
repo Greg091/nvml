@@ -1,10 +1,10 @@
 Persistent Memory Development Kit
 
-This is src/test/pmem_is_pmem/README.
+This is src/test/pmem_is_pmem_mt/README.
 
-This directory contains a unit test for pmem_is_pmem().
+This directory contains a multithreaded unit test for pmem_is_pmem().
 
-The program in pmem_is_pmem.c takes a file as an argument, memory
+The program in pmem_is_pmem_mt.c takes a file as an argument, memory
 maps that file, and prints out the return value from pmem_is_pmem()
 on the resulting range.  For true persistent memory, 1 is the expected
 output.  0 is the expected output for everything else.

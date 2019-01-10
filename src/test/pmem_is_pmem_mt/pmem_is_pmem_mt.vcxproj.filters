@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="pmem_is_pmem.c">
+    <ClCompile Include="pmem_is_pmem_mt.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
