@@ -197,6 +197,7 @@ endif
 
 PMEM_TESTS = \
 	pmem_include\
+	pmem_is_pmem\
 	pmem_is_pmem_mt\
 	pmem_is_pmem_posix\
 	pmem_map_file\

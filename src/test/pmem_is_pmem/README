@@ -1,0 +1,11 @@
+Persistent Memory Development Kit
+
+This is src/test/pmem_is_pmem/README.
+
+This directory contains a unit test for pmem_is_pmem().
+
+The program in pmem_is_pmem.c tests usage of pmem_is_pmem()
+on discontinuous mapped file and on file mapped using mmap().
+
+usage: pmem_is_pmem_mt test_case path size
+
