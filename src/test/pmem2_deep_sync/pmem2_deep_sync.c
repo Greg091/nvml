@@ -11,6 +11,7 @@
 #include "map.h"
 #include "mmap.h"
 #include "persist.h"
+#include "deep_sync.h"
 #include "pmem2_deep_sync.h"
 #include "pmem2_utils.h"
 #include "unittest.h"
@@ -18,15 +19,6 @@
 int n_msynces = 0;
 int n_persists = 0;
 int is_devdax = 0;
-
-/*
- * pmem2_persist_mock -- count pmem2_persist calls in the test
- */
-void
-pmem2_persist_mock(const void *addr, size_t len)
-{
-	n_persists++;
-}
 
 /*
  * map_init -- fill pmem2_map in minimal scope
@@ -38,12 +30,12 @@ map_init(struct pmem2_map *map)
 	map->content_length = length;
 	map->addr = MALLOC(length);
 #ifndef _WIN32
-	map->map_st = MALLOC(sizeof(os_stat_t));
+	map->src_fd_st = MALLOC(sizeof(os_stat_t));
 	/*
 	 * predefined 'st_rdev' value is needed to hardcode the mocked path
 	 * which is required to emulate DAX devices
 	 */
-	map->map_st->st_rdev = 60041;
+	map->src_fd_st->st_rdev = 60041;
 #endif
 }
 
@@ -54,7 +46,7 @@ static void
 map_cleanup(struct pmem2_map *map)
 {
 #ifndef _WIN32
-	FREE(map->map_st);
+	FREE(map->src_fd_st);
 #endif
 	FREE(map->addr);
 }
@@ -87,11 +79,13 @@ test_deep_sync_func(const struct test_case *tc, int argc, char *argv[])
 	size_t len = map.content_length;
 
 	map.effective_granularity = PMEM2_GRANULARITY_PAGE;
+	pmem2_set_flush_fns(&map);
 	int ret = pmem2_deep_sync(&map, addr, len);
 	UT_ASSERTeq(ret, 0);
 	counters_check_n_reset(0, 0);
 
 	map.effective_granularity = PMEM2_GRANULARITY_CACHE_LINE;
+	pmem2_set_flush_fns(&map);
 	ret = pmem2_deep_sync(&map, addr, len);
 	UT_ASSERTeq(ret, 0);
 	counters_check_n_reset(1, 0);
@@ -100,7 +94,7 @@ test_deep_sync_func(const struct test_case *tc, int argc, char *argv[])
 	pmem2_set_flush_fns(&map);
 	ret = pmem2_deep_sync(&map, addr, len);
 	UT_ASSERTeq(ret, 0);
-	counters_check_n_reset(1, 1);
+	counters_check_n_reset(2, 1);
 
 	map_cleanup(&map);
 
@@ -127,6 +121,7 @@ test_deep_sync_func_devdax(const struct test_case *tc, int argc, char *argv[])
 
 	map.effective_granularity = PMEM2_GRANULARITY_BYTE;
 	pmem2_set_flush_fns(&map);
+	pmem2_deep_sync_byte(&map, addr, len);
 	ret = pmem2_deep_sync(&map, addr, len);
 	UT_ASSERTeq(ret, 0);
 	counters_check_n_reset(0, 1);

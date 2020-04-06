@@ -6,17 +6,15 @@
 #
 TOP = ../../..
 vpath %.c $(TOP)/src/libpmem2
-
-INCS += -I$(TOP)/src/libpmem2
+vpath %.c $(TOP)/src/core
+vpath %.c $(TOP)/src/common
 
 TARGET = pmem2_deep_sync
 
 OBJS += pmem2_deep_sync.o\
-	deep_sync.o\
 	mocks_posix.o
 
-LIBPMEM2=internal-debug
+LIBPMEM2=private
 
 include ../Makefile.inc
-
 LDFLAGS += $(call extract_funcs, mocks_posix.c)

@@ -5,12 +5,9 @@
  * mocks_posix.c -- mocked functions used in deep_sync.c (Posix implementation)
  */
 
-#include "map.h"
-#include "os.h"
-#include "pmem2_deep_sync.h"
+#include "deep_sync.h"
 #include "pmem2_utils.h"
 #include "unittest.h"
-#include "util.h"
 
 #define BUS_DEVICE_PATH "/sys/bus/nd/devices"
 #define DEV_DEVICE_PATH "/sys/dev/char/234:137/device/dax_region"
@@ -78,10 +75,12 @@ FUNC_MOCK_RUN_DEFAULT {
 FUNC_MOCK_END
 
 /*
- * pmem2_set_flush_fns -- pmem2_set_flush_fns mock
+ * pmem2_deep_sync_byte -- pmem2_deep_sync_byte mock
  */
-FUNC_MOCK(pmem2_set_flush_fns, void, struct pmem2_map *map)
+FUNC_MOCK(pmem2_deep_sync_byte, int, struct pmem2_map *map, void *ptr,
+		size_t size)
 FUNC_MOCK_RUN_DEFAULT {
-	map->persist_fn = pmem2_persist_mock;
+	n_persists++;
+	return _FUNC_REAL(pmem2_deep_sync_byte)(map, ptr, size);
 }
 FUNC_MOCK_END

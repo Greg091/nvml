@@ -11,6 +11,4 @@ extern int n_msynces;
 extern int n_persists;
 extern int is_devdax;
 
-void pmem2_persist_mock(const void *addr, size_t len);
-
 #endif
