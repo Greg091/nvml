@@ -124,6 +124,7 @@
 #include <string.h>
 
 #include <libpmem2.h>
+#include <os_dummy.h>
 
 #ifndef _WIN32
 #include <unistd.h>
