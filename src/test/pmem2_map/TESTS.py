@@ -304,3 +304,33 @@ class TEST40(PMEM2_MAP):
     FD_PROTECTION on file opened in read-only mode - should fail
     """
     test_case = "test_map_prot_r_mode_fd_prot"
+
+
+class TEST41(PMEM2_MAP):
+    """
+    run program, which is put in mapped memory with set exec protection flag
+    """
+    test_case = "test_map_prot_exec_run_prog"
+
+
+class TEST42(PMEM2_MAP):
+    """
+    try to write to map with set exec protection - should fail
+    """
+    test_case = "test_map_prot_exec_do_write"
+
+
+class TEST43(PMEM2_MAP):
+    """
+    run program, which is put in mapped memory with set exec|write|read
+    protection
+    """
+    test_case = "test_map_prot_exec_read_write_run_prog"
+
+
+class TEST44(PMEM2_MAP):
+    """
+    try to run program, which is put in mapped memory with set
+    write|read - should fail
+    """
+    test_case = "test_map_prot_read_write_run_prog"

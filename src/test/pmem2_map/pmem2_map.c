@@ -1208,7 +1208,7 @@ test_map_prot_rw_mode_r_prot(const struct test_case *tc,
 }
 
 /*
- * test_map_prot_r_mode_r_prot -- test R/W protection
+ * test_map_prot_read_only -- test R/W protection
  */
 static int
 test_map_prot_r_mode_r_prot(const struct test_case *tc,
@@ -1328,6 +1328,192 @@ test_map_prot_r_mode_fd_prot(const struct test_case *tc,
 }
 
 /*
+ * sum[] --> simple program in assembly which calculates '2 + 2' and returns
+ * the result
+ */
+unsigned char sum_fn[] = {
+0x55,						// push		%rbp
+0x48, 0x89, 0xe5,				// mov		%rsp,%rbp
+0xc7, 0x45, 0xf8, 0x02, 0x00, 0x00, 0x00,	// movl		$0x2,-0x8(%rbp)
+0x8b, 0x45, 0xf8,				// mov		-0x8(%rbp),%eax
+0x01, 0xc0,					// add		%eax,%eax
+0x89, 0x45, 0xfc,				// mov		%eax,-0x4(%rbp)
+0x8b, 0x45, 0xfc,				// mov		-0x4(%rbp),%eax
+0x5d,						// pop		%rbp
+0xc3,						// retq
+};
+
+#define EXECUTE_FUNC(FUNC) (FUNC)()
+/*
+ * test_map_prot_exec_run_prog -- test run program, which is put in mapped
+ * memory with set exec protection flag
+ */
+static int
+test_map_prot_exec_run_prog(const struct test_case *tc,
+		int argc, char *argv[])
+{
+	if (argc < 2)
+		UT_FATAL("usage: test_map_prot_exec_run_prog <file> <size>");
+
+	char *file = argv[0];
+	struct pmem2_config cfg;
+	struct pmem2_source src;
+	int fd;
+
+	prepare_config(&cfg, &src, &fd, file, 0, 0, O_RDWR);
+	pmem2_config_set_protection(&cfg, PMEM2_PROT_WRITE);
+
+	struct pmem2_map *map;
+	int ret = pmem2_map(&cfg, &src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	char *addr_map = pmem2_map_get_address(map);
+	map->memcpy_fn(addr_map, sum_fn, sizeof(sum_fn), 0);
+
+	pmem2_unmap(&map);
+
+	pmem2_config_set_protection(&cfg, PMEM2_PROT_EXEC);
+
+	ret = pmem2_map(&cfg, &src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	addr_map = pmem2_map_get_address(map);
+	int sum_result = EXECUTE_FUNC((int (*)()) addr_map);
+	UT_ASSERTeq(sum_result, 4);
+
+	pmem2_unmap(&map);
+	CLOSE(fd);
+
+	return 2;
+}
+
+/*
+ * test_map_prot_exec_do_write -- test that exec protection flag does not
+ * implies write protection flag
+ */
+static int
+test_map_prot_exec_do_write(const struct test_case *tc,
+		int argc, char *argv[])
+{
+	if (argc < 2)
+		UT_FATAL("usage: test_map_prot_exec_do_write <file> <size>");
+
+	struct sigaction v;
+	sigemptyset(&v.sa_mask);
+	v.sa_flags = 0;
+	v.sa_handler = signal_handler;
+	SIGACTION(SIGSEGV, &v, NULL);
+
+	char *file = argv[0];
+	struct pmem2_config cfg;
+	struct pmem2_source src;
+	int fd;
+
+	prepare_config(&cfg, &src, &fd, file, 0, 0, O_RDWR);
+	pmem2_config_set_protection(&cfg, PMEM2_PROT_EXEC);
+
+	struct pmem2_map *map;
+	int ret = pmem2_map(&cfg, &src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	char *addr_map = pmem2_map_get_address(map);
+	if (!ut_sigsetjmp(Jmp)) {
+		/* memset from above should now fail */
+		map->memcpy_fn(addr_map, sum_fn, sizeof(sum_fn), 0);
+	} else {
+		UT_OUT("sum function should now fail");
+	}
+
+	pmem2_unmap(&map);
+	CLOSE(fd);
+
+	return 2;
+}
+
+/*
+ * test_map_prot_exec_read_write_run_prog -- test run program, which is put in
+ * mapped memory with set exec|write|read protection
+ */
+static int
+test_map_prot_exec_read_write_run_prog(const struct test_case *tc,
+		int argc, char *argv[])
+{
+	if (argc < 2)
+		UT_FATAL(
+		"usage: test_map_prot_exec_read_write_run_prog <file> <size>");
+
+	char *file = argv[0];
+	struct pmem2_config cfg;
+	struct pmem2_source src;
+	int fd;
+
+	prepare_config(&cfg, &src, &fd, file, 0, 0, O_RDWR);
+	pmem2_config_set_protection(&cfg,
+			PMEM2_PROT_EXEC | PMEM2_PROT_WRITE | PMEM2_PROT_READ);
+
+	struct pmem2_map *map;
+	int ret = pmem2_map(&cfg, &src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	char *addr_map = pmem2_map_get_address(map);
+	map->memcpy_fn(addr_map, sum_fn, sizeof(sum_fn), 0);
+
+	int sum_result = EXECUTE_FUNC((int (*)()) addr_map);
+	UT_ASSERTeq(sum_result, 4);
+
+	pmem2_unmap(&map);
+	CLOSE(fd);
+
+	return 2;
+}
+
+/*
+ * test_map_prot_read_write_run_prog -- test try to run program, which is put
+ * in mapped memory with set write|read protection - should fail
+ */
+static int
+test_map_prot_read_write_run_prog(const struct test_case *tc,
+		int argc, char *argv[])
+{
+	if (argc < 2)
+		UT_FATAL(
+		"usage: test_map_prot_read_write_run_prog <file> <size>");
+
+	struct sigaction v;
+	sigemptyset(&v.sa_mask);
+	v.sa_flags = 0;
+	v.sa_handler = signal_handler;
+	SIGACTION(SIGSEGV, &v, NULL);
+
+	char *file = argv[0];
+	struct pmem2_config cfg;
+	struct pmem2_source src;
+	int fd;
+
+	prepare_config(&cfg, &src, &fd, file, 0, 0, O_RDWR);
+	pmem2_config_set_protection(&cfg, PMEM2_PROT_WRITE | PMEM2_PROT_READ);
+
+	struct pmem2_map *map;
+	int ret = pmem2_map(&cfg, &src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	void *addr_map = pmem2_map_get_address(map);
+	map->memcpy_fn(addr_map, sum_fn, sizeof(sum_fn), 0);
+
+	if (!ut_sigsetjmp(Jmp)) {
+		/* sum function should now fail */
+		EXECUTE_FUNC((int (*)()) addr_map);
+	} else {
+		UT_OUT("sum function succeeded");
+	}
+
+	pmem2_unmap(&map);
+	CLOSE(fd);
+
+	return 2;
+}
+
+/*
  * test_cases -- available test cases
  */
 static struct test_case test_cases[] = {
@@ -1363,6 +1549,10 @@ static struct test_case test_cases[] = {
 	TEST_CASE(test_map_prot_r_mode_r_prot),
 	TEST_CASE(test_map_prot_rw_mode_fd_prot),
 	TEST_CASE(test_map_prot_r_mode_fd_prot),
+	TEST_CASE(test_map_prot_exec),
+	TEST_CASE(test_map_prot_exec_do_write),
+	TEST_CASE(test_map_prot_exec_read_write),
+	TEST_CASE(test_map_prot_read_write),
 };
 
 #define NTESTS (sizeof(test_cases) / sizeof(test_cases[0]))
