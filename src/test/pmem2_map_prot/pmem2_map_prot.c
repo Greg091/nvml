@@ -105,24 +105,19 @@ test_rw_mode_rw_prot(const struct test_case *tc,
 }
 
 /*
- * test_r_mode_rw_prot -- test R/W protection
- * pmem2_map() - should fail
+ * template_mode_prot_mismatch - try to map file with mutually exclusive FD
+ * access and map protection
  */
-static int
-test_r_mode_rw_prot(const struct test_case *tc,
-	int argc, char *argv[])
+static void
+template_mode_prot_mismatch(char *file, int access, unsigned prot)
 {
-	if (argc < 1)
-		UT_FATAL("usage: test_map_prot <file>");
-
-	char *file = argv[0];
 	struct FHandle *fh;
 	struct pmem2_config cfg;
 	struct pmem2_source *src;
 
 	/* read/write on file opened in read-only mode - should fail */
-	prepare_config(&cfg, &src, &fh, file, 0, 0, FH_READ);
-	pmem2_config_set_protection(&cfg, PMEM2_PROT_READ | PMEM2_PROT_WRITE);
+	prepare_config(&cfg, &src, &fh, file, 0, 0, access);
+	pmem2_config_set_protection(&cfg, prot);
 
 	struct pmem2_map *map;
 	int ret = pmem2_map(&cfg, src, &map);
@@ -130,6 +125,56 @@ test_r_mode_rw_prot(const struct test_case *tc,
 
 	UT_FH_CLOSE(fh);
 	PMEM2_SOURCE_DELETE(&src);
+}
+
+/*
+ * test_r_mode_rw_prot -- test R/W protection
+ */
+static int
+test_r_mode_rw_prot(const struct test_case *tc,
+		int argc, char *argv[])
+{
+	if (argc < 1)
+		UT_FATAL("usage: test_map_prot <file>");
+
+	char *file = argv[0];
+	template_mode_prot_mismatch(file, FH_READ,
+					PMEM2_PROT_WRITE | PMEM2_PROT_READ);
+
+	return 1;
+}
+
+/*
+ * test_rw_modex_rwx_prot - try to map read/write file with RDWR | EXEC
+ * protection, expect failure
+ */
+static int
+test_rw_modex_rwx_prot(const struct test_case *tc, int argc, char *argv[])
+{
+	if (argc < 1)
+		UT_FATAL("usage: test_rw_modex_rwx_prot <file>");
+
+	char *file = argv[0];
+	template_mode_prot_mismatch(file, FH_RDWR,
+			PMEM2_PROT_EXEC |PMEM2_PROT_WRITE | PMEM2_PROT_READ);
+
+	return 1;
+}
+
+/*
+ * test_rw_modex_rx_prot - try to map read/write file with READ | EXEC
+ * protection, expect failure
+ */
+static int
+test_rw_modex_rx_prot(const struct test_case *tc, int argc, char *argv[])
+{
+	if (argc < 1)
+		UT_FATAL("usage: test_rw_modex_rx_prot <file>");
+
+	char *file = argv[0];
+	template_mode_prot_mismatch(file, FH_RDWR,
+					PMEM2_PROT_EXEC | PMEM2_PROT_READ);
+
 	return 1;
 }
 
@@ -274,14 +319,291 @@ test_rw_mode_none_prot(const struct test_case *tc,
 }
 
 /*
+ * sum_asm[] --> simple program in assembly which calculates '2 + 2' and
+ * returns the result
+ */
+unsigned char sum_asm[] = {
+0x55,						/* push	%rbp */
+0x48, 0x89, 0xe5,				/* mov	%rsp,%rbp */
+0xc7, 0x45, 0xf8, 0x02, 0x00, 0x00, 0x00,	/* movl	$0x2,-0x8(%rbp) */
+0x8b, 0x45, 0xf8,				/* mov	-0x8(%rbp),%eax */
+0x01, 0xc0,					/* add	%eax,%eax */
+0x89, 0x45, 0xfc,				/* mov	%eax,-0x4(%rbp) */
+0x8b, 0x45, 0xfc,				/* mov	-0x4(%rbp),%eax */
+0x5d,						/* pop	%rbp */
+0xc3,						/* retq */
+};
+
+typedef int (*sum_fn)(void);
+
+/*
+ * test_rx_mode_rx_prot_do_execute -- copy string with the program to mapped
+ * memory to prepare memory, execute the program and verify result
+ */
+static int
+test_rx_mode_rx_prot_do_execute(const struct test_case *tc, int argc,
+				char *argv[])
+{
+	if (argc < 1)
+		UT_FATAL("usage: test_rx_mode_rx_prot_do_execute <file>");
+
+	char *file = argv[0];
+	struct pmem2_config cfg;
+	struct pmem2_source *src;
+	struct FHandle *fh;
+
+	/* Windows does not support PMEM2_PROT_WRITE combination */
+	prepare_config(&cfg, &src, &fh, file, 0, 0, FH_EXEC | FH_RDWR);
+	pmem2_config_set_protection(&cfg, PMEM2_PROT_WRITE | PMEM2_PROT_READ);
+
+	struct pmem2_map *map;
+	int ret = pmem2_map(&cfg, src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	char *addr_map = pmem2_map_get_address(map);
+	map->memcpy_fn(addr_map, sum_asm, sizeof(sum_asm), 0);
+
+	pmem2_unmap(&map);
+
+	/* Windows does not support PMEM2_PROT_EXEC combination */
+	pmem2_config_set_protection(&cfg, PMEM2_PROT_READ | PMEM2_PROT_EXEC);
+
+	ret = pmem2_map(&cfg, src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	sum_fn sum = (sum_fn)addr_map;
+	int sum_result = sum();
+	UT_ASSERTeq(sum_result, 4);
+
+	pmem2_unmap(&map);
+	UT_FH_CLOSE(fh);
+	PMEM2_SOURCE_DELETE(&src);
+
+	return 2;
+}
+
+/*
+ * test_rwx_mode_rx_prot_do_write -- try to copy the string into mapped memory,
+ * expect failure
+ */
+static int
+test_rwx_mode_rx_prot_do_write(const struct test_case *tc,
+		int argc, char *argv[])
+{
+	if (argc < 2)
+		UT_FATAL("usage: test_rwx_mode_rx_prot_do_write <file>");
+
+	struct sigaction v;
+	sigemptyset(&v.sa_mask);
+	v.sa_flags = 0;
+	v.sa_handler = signal_handler;
+	SIGACTION(SIGSEGV, &v, NULL);
+
+	char *file = argv[0];
+	unsigned flags = ATOU(argv[1]);
+	struct pmem2_config cfg;
+	struct pmem2_source *src;
+	struct FHandle *fh;
+
+	prepare_config(&cfg, &src, &fh, file, 0, 0, FH_EXEC | FH_RDWR);
+	/* Windows does not support PMEM2_PROT_EXEC combination */
+	pmem2_config_set_protection(&cfg, PMEM2_PROT_READ | PMEM2_PROT_EXEC);
+	if (flags)
+		pmem2_config_set_sharing(&cfg, PMEM2_PRIVATE);
+
+	struct pmem2_map *map;
+	int ret = pmem2_map(&cfg, src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	char *addr_map = pmem2_map_get_address(map);
+	if (!ut_sigsetjmp(Jmp)) {
+		/* memcpy_fn should fail */
+		map->memcpy_fn(addr_map, sum_asm, sizeof(sum_asm), 0);
+	} else {
+		UT_OUT("sum function should now fail");
+	}
+
+	pmem2_unmap(&map);
+	UT_FH_CLOSE(fh);
+	PMEM2_SOURCE_DELETE(&src);
+
+	return 2;
+}
+
+/*
+ * test_rwx_mode_rwx_prot_do_execute -- copy string with the program to mapped
+ * memory to prepare memory, execute the program and verify result
+ */
+static int
+test_rwx_mode_rwx_prot_do_execute(const struct test_case *tc,
+		int argc, char *argv[])
+{
+	if (argc < 2)
+		UT_FATAL(
+		"usage: test_rwx_mode_rwx_prot_do_execute <file>");
+
+	char *file = argv[0];
+	unsigned flags = ATOU(argv[1]);
+	struct pmem2_config cfg;
+	struct pmem2_source *src;
+	struct FHandle *fh;
+
+	prepare_config(&cfg, &src, &fh, file, 0, 0, FH_EXEC | FH_RDWR);
+	pmem2_config_set_protection(&cfg,
+			PMEM2_PROT_EXEC | PMEM2_PROT_WRITE | PMEM2_PROT_READ);
+	if (flags)
+		pmem2_config_set_sharing(&cfg, PMEM2_PRIVATE);
+
+	struct pmem2_map *map;
+	int ret = pmem2_map(&cfg, src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	char *addr_map = pmem2_map_get_address(map);
+	map->memcpy_fn(addr_map, sum_asm, sizeof(sum_asm), 0);
+
+	sum_fn sum = (sum_fn)addr_map;
+	int sum_result = sum();
+	UT_ASSERTeq(sum_result, 4);
+
+	pmem2_unmap(&map);
+	UT_FH_CLOSE(fh);
+	PMEM2_SOURCE_DELETE(&src);
+
+	return 2;
+}
+
+/*
+ * test_rw_mode_rw_prot_do_execute -- copy string with the program to mapped
+ * memory to prepare memory, and execute the program - should fail
+ */
+static int
+test_rw_mode_rw_prot_do_execute(const struct test_case *tc,
+		int argc, char *argv[])
+{
+	if (argc < 2)
+		UT_FATAL(
+		"usage: test_rw_mode_rwx_prot_do_execute <file> <size>");
+
+	struct sigaction v;
+	sigemptyset(&v.sa_mask);
+	v.sa_flags = 0;
+	v.sa_handler = signal_handler;
+	SIGACTION(SIGSEGV, &v, NULL);
+
+	char *file = argv[0];
+	unsigned flags = ATOU(argv[1]);
+	struct pmem2_config cfg;
+	struct pmem2_source *src;
+	struct FHandle *fh;
+
+	prepare_config(&cfg, &src, &fh, file, 0, 0, FH_RDWR);
+	pmem2_config_set_protection(&cfg, PMEM2_PROT_WRITE | PMEM2_PROT_READ);
+	if (flags)
+		pmem2_config_set_sharing(&cfg, PMEM2_PRIVATE);
+
+	struct pmem2_map *map;
+	int ret = pmem2_map(&cfg, src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	void *addr_map = pmem2_map_get_address(map);
+	map->memcpy_fn(addr_map, sum_asm, sizeof(sum_asm), 0);
+
+	sum_fn sum = (sum_fn)addr_map;
+	if (!ut_sigsetjmp(Jmp)) {
+		sum(); /* sum function should now fail */
+	} else {
+		UT_OUT("sum function succeeded");
+	}
+
+	pmem2_unmap(&map);
+	UT_FH_CLOSE(fh);
+	PMEM2_SOURCE_DELETE(&src);
+
+	return 2;
+}
+
+static const char *initial_state = "No code.";
+
+/*
+ * test_rwx_prot_map_priv_do_execute -- copy string with the program to
+ * the mapped memory with MAP_PRIVATE to prepare memory, execute the program
+ * and verify the result
+ */
+static int
+test_rwx_prot_map_priv_do_execute(const struct test_case *tc,
+	int argc, char *argv[])
+{
+	if (argc < 1)
+		UT_FATAL(
+			"usage: test_rwx_prot_map_priv_do_execute <file>");
+
+	char *file = argv[0];
+	struct pmem2_config cfg;
+	struct pmem2_source *src;
+	struct FHandle *fh;
+	struct FHandle *fh_reopen;
+
+	prepare_config(&cfg, &src, &fh, file, 0, 0, FH_RDWR);
+	pmem2_config_set_protection(&cfg, PMEM2_PROT_WRITE | PMEM2_PROT_READ);
+
+	struct pmem2_map *map;
+	int ret = pmem2_map(&cfg, src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	char *addr_map = pmem2_map_get_address(map);
+	map->memcpy_fn(addr_map, initial_state, sizeof(initial_state), 0);
+
+	pmem2_unmap(&map);
+	UT_FH_CLOSE(fh);
+	PMEM2_SOURCE_DELETE(&src);
+
+	prepare_config(&cfg, &src, &fh_reopen, file, 0, 0, FH_READ | FH_EXEC);
+	pmem2_config_set_protection(&cfg,
+		PMEM2_PROT_EXEC | PMEM2_PROT_WRITE | PMEM2_PROT_READ);
+	pmem2_config_set_sharing(&cfg, PMEM2_PRIVATE);
+
+	ret = pmem2_map(&cfg, src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	addr_map = pmem2_map_get_address(map);
+	map->memcpy_fn(addr_map, sum_asm, sizeof(sum_asm), 0);
+
+	sum_fn sum = (sum_fn)addr_map;
+	int sum_result = sum();
+	UT_ASSERTeq(sum_result, 4);
+
+	pmem2_unmap(&map);
+
+	ret = pmem2_map(&cfg, src, &map);
+	UT_ASSERTeq(ret, 0);
+
+	addr_map = pmem2_map_get_address(map);
+	/* check if changes in private mapping affect initial state */
+	UT_ASSERTeq(memcmp(addr_map, initial_state, strlen(initial_state)), 0);
+
+	pmem2_unmap(&map);
+	UT_FH_CLOSE(fh_reopen);
+	PMEM2_SOURCE_DELETE(&src);
+
+	return 1;
+}
+
+/*
  * test_cases -- available test cases
  */
 static struct test_case test_cases[] = {
 	TEST_CASE(test_rw_mode_rw_prot),
 	TEST_CASE(test_r_mode_rw_prot),
+	TEST_CASE(test_rw_modex_rwx_prot),
+	TEST_CASE(test_rw_modex_rx_prot),
 	TEST_CASE(test_rw_mode_r_prot),
 	TEST_CASE(test_r_mode_r_prot),
 	TEST_CASE(test_rw_mode_none_prot),
+	TEST_CASE(test_rx_mode_rx_prot_do_execute),
+	TEST_CASE(test_rwx_mode_rx_prot_do_write),
+	TEST_CASE(test_rwx_mode_rwx_prot_do_execute),
+	TEST_CASE(test_rw_mode_rw_prot_do_execute),
+	TEST_CASE(test_rwx_prot_map_priv_do_execute),
 };
 
 #define NTESTS (sizeof(test_cases) / sizeof(test_cases[0]))

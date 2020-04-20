@@ -14,6 +14,7 @@
 #include "pmem2.h"
 #include "unittest.h"
 #include "ut_pmem2.h"
+#include "ut_fh.h"
 
 #define KILOBYTE (1 << 10)
 #define MEGABYTE (1 << 20)
@@ -726,7 +727,6 @@ test_map_sharing_private(const struct test_case *tc, int argc, char *argv[])
 {
 	if (argc < 1)
 		UT_FATAL("usage: test_map_sharing_private <file>");
-
 	char *file = argv[0];
 
 	struct pmem2_config cfg;
@@ -813,7 +813,6 @@ test_map_sharing_private_rdonly_file(const struct test_case *tc, int argc,
 		UT_FATAL("usage: test_map_sharing_private_rdonly_file <file>");
 
 	char *file = argv[0];
-
 	struct pmem2_config cfg;
 	struct pmem2_source src;
 	int fd;
