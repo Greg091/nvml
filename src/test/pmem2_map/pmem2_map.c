@@ -1549,10 +1549,10 @@ static struct test_case test_cases[] = {
 	TEST_CASE(test_map_prot_r_mode_r_prot),
 	TEST_CASE(test_map_prot_rw_mode_fd_prot),
 	TEST_CASE(test_map_prot_r_mode_fd_prot),
-	TEST_CASE(test_map_prot_exec),
+	TEST_CASE(test_map_prot_exec_run_prog),
 	TEST_CASE(test_map_prot_exec_do_write),
-	TEST_CASE(test_map_prot_exec_read_write),
-	TEST_CASE(test_map_prot_read_write),
+	TEST_CASE(test_map_prot_exec_read_write_run_prog),
+	TEST_CASE(test_map_prot_read_write_run_prog),
 };
 
 #define NTESTS (sizeof(test_cases) / sizeof(test_cases[0]))
